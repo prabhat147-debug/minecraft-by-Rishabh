@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JS Voxel World</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: white; transform: translate(-50%, -50%); mix-blend-mode: difference; pointer-events: none; }
+        #ui { position: absolute; bottom: 20px; left: 20px; color: white; background: rgba(0,0,0,0.5); padding: 10px; pointer-events: none; }
+        #mobile-controls { position: absolute; bottom: 20px; right: 20px; display: none; }
+        .btn { width: 60px; height: 60px; background: rgba(255,255,255,0.3); border: 2px solid white; color: white; border-radius: 10px; margin: 5px; font-weight: bold; }
+        @media (pointer: coarse) { #mobile-controls { display: block; } }
+    </style>
+</head>
+<body>
+
+<div id="crosshair"></div>
+<div id="ui">Click to Start<br>WASD: Move | Left Click: Break | Right Click: Place</div>
+<div id="mobile-controls">
+    <button class="btn" id="btn-place">PLACE</button>
+    <button class="btn" id="btn-break">BREAK</button>
+</div>
+
+<script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@0.136.0';
+    import { PointerLockControls } from 'https://cdn.skypack.dev/three@0.136.0/examples/jsm/controls/PointerLockControls.js';
+
+    // --- SETUP ---
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87CEEB); // Sky
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: false }); // Pixelated feel
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // --- LIGHTING ---
+    const ambientLight = new THREE.AmbientLight(0x404040, 2);
+    scene.add(ambientLight);
+    const sun = new THREE.DirectionalLight(0xffffff, 1);
+    sun.position.set(10, 20, 10);
+    scene.add(sun);
+
+    // --- VOXEL LOGIC ---
+    const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+    const textureLoader = new THREE.TextureLoader();
+    // Using a placeholder green color (in real Minecraft, you'd use a grass texture)
+    const material = new THREE.MeshStandardMaterial({ color: 0x567d46 }); 
+    const blocks = [];
+
+    function createBlock(x, y, z) {
+        const block = new THREE.Mesh(boxGeo, material);
+        block.position.set(x, y, z);
+        scene.add(block);
+        blocks.push(block);
+    }
+
+    // Generate a small 10x10 floor
+    for(let x = -5; x < 5; x++) {
+        for(let z = -5; z < 5; z++) {
+            createBlock(x, 0, z);
+        }
+    }
+
+    // --- CONTROLS ---
+    const controls = new PointerLockControls(camera, document.body);
+    document.body.addEventListener('click', () => { if(!controls.isLocked) controls.lock(); });
+
+    let moveF = false, moveB = false, moveL = false, moveR = false;
+    document.addEventListener('keydown', (e) => {
+        if(e.code === 'KeyW') moveF = true;
+        if(e.code === 'KeyS') moveB = true;
+        if(e.code === 'KeyA') moveL = true;
+        if(e.code === 'KeyD') moveR = true;
+    });
+    document.addEventListener('keyup', (e) => {
+        if(e.code === 'KeyW') moveF = false;
+        if(e.code === 'KeyS') moveB = false;
+        if(e.code === 'KeyA') moveL = false;
+        if(e.code === 'KeyD') moveR = false;
+    });
+
+    // --- INTERACTION (BREAK/PLACE) ---
+    const raycaster = new THREE.Raycaster();
+    function performAction(isPlacing) {
+        raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+        const intersects = raycaster.intersectObjects(blocks);
+
+        if (intersects.length > 0) {
+            const intersect = intersects[0];
+            if (isPlacing) {
+                // Place block on the face we hit
+                const pos = intersect.object.position.clone().add(intersect.face.normal);
+                createBlock(pos.x, pos.y, pos.z);
+            } else {
+                // Break block
+                scene.remove(intersect.object);
+                blocks.splice(blocks.indexOf(intersect.object), 1);
+            }
+        }
+    }
+
+    document.addEventListener('mousedown', (e) => {
+        if (!controls.isLocked) return;
+        if (e.button === 0) performAction(false); // Left Click: Break
+        if (e.button === 2) performAction(true);  // Right Click: Place
+    });
+    
+    // Mobile Buttons
+    document.getElementById('btn-place').addEventListener('touchstart', () => performAction(true));
+    document.getElementById('btn-break').addEventListener('touchstart', () => performAction(false));
+
+    // --- GAME LOOP ---
+    camera.position.set(0, 2, 5);
+    function animate() {
+        requestAnimationFrame(animate);
+        if (controls.isLocked) {
+            if (moveF) controls.moveForward(0.1);
+            if (moveB) controls.moveForward(-0.1);
+            if (moveL) controls.moveRight(-0.1);
+            if (moveR) controls.moveRight(0.1);
+        }
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+</html>
